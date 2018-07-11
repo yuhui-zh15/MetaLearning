@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from data import get_batch
 from meta_optimizer import MetaModel, MetaOptimizer, FastMetaOptimizer
-from model import Model
+from model import Model, Model2
 from torch.autograd import Variable
 from torchvision import datasets, transforms
 from torchtext import data, datasets
@@ -35,25 +35,27 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 
 assert args.optimizer_steps % args.truncated_bptt_step == 0
 
-kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-# train_loader = torch.utils.data.DataLoader(
-#     datasets.MNIST('../data', train=True, download=True,
-#                    transform=transforms.Compose([
-#                        transforms.ToTensor(),
-#                        transforms.Normalize((0.1307,), (0.3081,))
-#                    ])),
-#     batch_size=args.batch_size, shuffle=True, **kwargs)
-# test_loader = torch.utils.data.DataLoader(
-#     datasets.MNIST('../data', train=False, transform=transforms.Compose([
-#                        transforms.ToTensor(),
-#                        transforms.Normalize((0.1307,), (0.3081,))
-#                    ])),
-#     batch_size=args.batch_size, shuffle=True, **kwargs)
+
 
 def main():
+    kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
+    train_loader = torch.utils.data.DataLoader(
+        datasets.MNIST('../data', train=True, download=True,
+                       transform=transforms.Compose([
+                           transforms.ToTensor(),
+                           transforms.Normalize((0.1307,), (0.3081,))
+                       ])),
+        batch_size=args.batch_size, shuffle=True, **kwargs)
+    test_loader = torch.utils.data.DataLoader(
+        datasets.MNIST('../data', train=False, transform=transforms.Compose([
+                           transforms.ToTensor(),
+                           transforms.Normalize((0.1307,), (0.3081,))
+                       ])),
+        batch_size=args.batch_size, shuffle=True, **kwargs)
+
     # Create a meta optimizer that wraps a model into a meta model
     # to keep track of the meta updates.
-    meta_model = Model()
+    meta_model = Model2()
     if args.cuda:
         meta_model.cuda()
 
@@ -72,7 +74,7 @@ def main():
         for i in range(args.updates_per_epoch):
 
             # Sample a new model
-            model = Model()
+            model = Model2()
             if args.cuda:
                 model.cuda()
 
@@ -168,7 +170,7 @@ def main2():
     if args.cuda:
         meta_model.cuda()
 
-    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    meta_optimizer = MetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
     if args.cuda:
         meta_optimizer.cuda()
 
