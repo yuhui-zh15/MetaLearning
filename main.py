@@ -11,7 +11,7 @@ from meta_optimizer import MetaModel, MetaOptimizer, FastMetaOptimizer
 from model import Model
 from torch.autograd import Variable
 from torchvision import datasets, transforms
-# from torchtext import data, datasets
+from torchtext import data, datasets
 
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
@@ -36,19 +36,19 @@ args.cuda = not args.no_cuda and torch.cuda.is_available()
 assert args.optimizer_steps % args.truncated_bptt_step == 0
 
 kwargs = {'num_workers': 1, 'pin_memory': True} if args.cuda else {}
-train_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=True, download=True,
-                   transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
-test_loader = torch.utils.data.DataLoader(
-    datasets.MNIST('../data', train=False, transform=transforms.Compose([
-                       transforms.ToTensor(),
-                       transforms.Normalize((0.1307,), (0.3081,))
-                   ])),
-    batch_size=args.batch_size, shuffle=True, **kwargs)
+# train_loader = torch.utils.data.DataLoader(
+#     datasets.MNIST('../data', train=True, download=True,
+#                    transform=transforms.Compose([
+#                        transforms.ToTensor(),
+#                        transforms.Normalize((0.1307,), (0.3081,))
+#                    ])),
+#     batch_size=args.batch_size, shuffle=True, **kwargs)
+# test_loader = torch.utils.data.DataLoader(
+#     datasets.MNIST('../data', train=False, transform=transforms.Compose([
+#                        transforms.ToTensor(),
+#                        transforms.Normalize((0.1307,), (0.3081,))
+#                    ])),
+#     batch_size=args.batch_size, shuffle=True, **kwargs)
 
 def main():
     # Create a meta optimizer that wraps a model into a meta model
@@ -186,8 +186,6 @@ def main2():
 
             batch = next(iter(train_iter))
             x, y = batch, batch.label - 1
-            if args.cuda:
-                x, y = x.cuda(), y.cuda()
 
             # Compute initial loss of the model
             f_x = model(x)
@@ -205,8 +203,6 @@ def main2():
                 for j in range(args.truncated_bptt_step):
                     batch = next(iter(train_iter))
                     x, y = batch, batch.label - 1
-                    if args.cuda:
-                        x, y = x.cuda(), y.cuda()
 
                     # First we need to compute the gradients of the model
                     f_x = model(x)
@@ -236,7 +232,7 @@ def main2():
 
                 print 'acc=', acc
                 print 'loss=', loss
-                print 'para=', meta_optimizer.linear1._parameters.items()
+                # print 'para=', meta_optimizer.linear1._parameters.items()
             # Compute relative decrease in the loss function w.r.t initial
             # value
             decrease_in_loss += loss.data[0] / initial_loss.data[0]
@@ -248,4 +244,4 @@ def main2():
 
 
 if __name__ == "__main__":
-    main()
+    main2()

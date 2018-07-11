@@ -22,51 +22,63 @@ class MetaOptimizer(nn.Module):
         self.linear1 = nn.Linear(3, hidden_size)
         self.ln1 = LayerNorm1D(hidden_size)
 
-        self.lstms = []
-        for i in range(num_layers):
-            self.lstms.append(LayerNormLSTMCell(hidden_size, hidden_size))
+        # self.lstms = []
+        # for i in range(num_layers):
+        #     self.lstms.append(LayerNormLSTMCell(hidden_size, hidden_size))
+
+        self.lstms = LayerNormLSTMCell(hidden_size, hidden_size)
 
         self.linear2 = nn.Linear(hidden_size, 1)
         self.linear2.weight.data.mul_(0.1)
         self.linear2.bias.data.fill_(0.0)
 
-        for module in self.children():
-            print module
-            # print module._parameters.items()
 
     def cuda(self):
         super(MetaOptimizer, self).cuda()
-        for i in range(len(self.lstms)):
-            self.lstms[i].cuda()
+        # for i in range(len(self.lstms)):
+        #     self.lstms[i].cuda()
 
     def reset_lstm(self, keep_states=False, model=None, use_cuda=False):
         self.meta_model.reset()
         self.meta_model.copy_params_from(model)
 
         if keep_states:
-            for i in range(len(self.lstms)):
-                self.hx[i] = Variable(self.hx[i].data)
-                self.cx[i] = Variable(self.cx[i].data)
+            # for i in range(len(self.lstms)):
+            #     self.hx[i] = Variable(self.hx[i].data)
+            #     self.cx[i] = Variable(self.cx[i].data)
+            self.hx = Variable(self.hx.data)
+            self.cx = Variable(self.cx.data)
         else:
-            self.hx = []
-            self.cx = []
-            for i in range(len(self.lstms)):
-                self.hx.append(Variable(torch.zeros(1, self.hidden_size)))
-                self.cx.append(Variable(torch.zeros(1, self.hidden_size)))
-                if use_cuda:
-                    self.hx[i], self.cx[i] = self.hx[i].cuda(), self.cx[i].cuda()
+            # self.hx = []
+            # self.cx = []
+            # for i in range(len(self.lstms)):
+            #     self.hx.append(Variable(torch.zeros(1, self.hidden_size)))
+            #     self.cx.append(Variable(torch.zeros(1, self.hidden_size)))
+            #     if use_cuda:
+            #         self.hx[i], self.cx[i] = self.hx[i].cuda(), self.cx[i].cuda()
+            self.hx = Variable(torch.zeros(1, self.hidden_size))
+            self.cx = Variable(torch.zeros(1, self.hidden_size))
+            if use_cuda:
+                self.hx, self.cx = self.hx.cuda(), self.cx.cuda()
 
     def forward(self, x):
         # Gradients preprocessing
         x = F.tanh(self.ln1(self.linear1(x)))
 
-        for i in range(len(self.lstms)):
-            if x.size(0) != self.hx[i].size(0):
-                self.hx[i] = self.hx[i].expand(x.size(0), self.hx[i].size(1))
-                self.cx[i] = self.cx[i].expand(x.size(0), self.cx[i].size(1))
+        # for i in range(len(self.lstms)):
+        #     if x.size(0) != self.hx[i].size(0):
+        #         self.hx[i] = self.hx[i].expand(x.size(0), self.hx[i].size(1))
+        #         self.cx[i] = self.cx[i].expand(x.size(0), self.cx[i].size(1))
 
-            self.hx[i], self.cx[i] = self.lstms[i](x, (self.hx[i], self.cx[i]))
-            x = self.hx[i]
+        #     self.hx[i], self.cx[i] = self.lstms[i](x, (self.hx[i], self.cx[i]))
+        #     x = self.hx[i]
+
+        if x.size(0) != self.hx.size(0):
+            self.hx = self.hx.expand(x.size(0), self.hx.size(1))
+            self.cx = self.cx.expand(x.size(0), self.cx.size(1))
+
+        self.hx, self.cx = self.lstms(x, (self.hx, self.cx))
+        x = self.hx
 
         x = self.linear2(x)
         return x.squeeze()
@@ -76,8 +88,9 @@ class MetaOptimizer(nn.Module):
         grads = []
 
         for module in model_with_grads.children():
-            grads.append(module._parameters['weight'].grad.data.view(-1))
-            grads.append(module._parameters['bias'].grad.data.view(-1))
+            if type(module) == torch.nn.modules.sparse.Embedding: continue
+            for name, p in module._parameters.items():
+                grads.append(p.grad.data.view(-1))
 
         flat_params = self.meta_model.get_flat_params()
         flat_grads = preprocess_gradients(torch.cat(grads))
