@@ -59,7 +59,7 @@ def main():
     if args.cuda:
         meta_model.cuda()
 
-    meta_optimizer = MetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
     if args.cuda:
         meta_optimizer.cuda()
 
@@ -134,7 +134,7 @@ def main():
             final_loss += loss.data[0]
 
         print("Epoch: {}, final loss {}, average final/initial loss ratio: {}, params: {}, acc: {}".format(epoch, final_loss / args.updates_per_epoch,
-                                                                       decrease_in_loss / args.updates_per_epoch, meta_optimizer.linear1._parameters.items(), acc))
+                                                                       decrease_in_loss / args.updates_per_epoch, [meta_optimizer.f, meta_optimizer.i], acc))
 
 class Config:
     emb_dim = 300
@@ -171,11 +171,11 @@ def main2():
     if args.cuda:
         meta_model.cuda()
 
-    meta_optimizer = MetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
     if args.cuda:
         meta_optimizer.cuda()
 
-    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-3)
+    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-4)
 
     for epoch in range(args.max_epoch):
         decrease_in_loss = 0.0
@@ -235,14 +235,14 @@ def main2():
 
                 print 'acc=', acc
                 print 'loss=', loss
-                # print 'para=', meta_optimizer.linear1._parameters.items()
+                print 'para=', [meta_optimizer.f, meta_optimizer.i]
             # Compute relative decrease in the loss function w.r.t initial
             # value
             decrease_in_loss += loss.data[0] / initial_loss.data[0]
             final_loss += loss.data[0]
 
         print("Epoch: {}, final loss {}, average final/initial loss ratio: {}, params: {}".format(epoch, final_loss / args.updates_per_epoch,
-                                                                       decrease_in_loss / args.updates_per_epoch, meta_optimizer.linear1._parameters.items()))
+                                                                       decrease_in_loss / args.updates_per_epoch, [meta_optimizer.f, meta_optimizer.i]))
 
 def main_simple():
     TEXT = data.Field(sequential=True, include_lengths=True)

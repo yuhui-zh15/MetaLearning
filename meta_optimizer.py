@@ -128,7 +128,7 @@ class FastMetaOptimizer(nn.Module):
             self.f = Variable(self.f.data)
             self.i = Variable(self.i.data)
         else:
-            self.f = Variable(torch.zeros(1, 1))
+            self.f = Variable(torch.ones(1, 1))
             self.i = Variable(torch.zeros(1, 1))
             if use_cuda:
                 self.f = self.f.cuda()
