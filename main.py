@@ -8,7 +8,7 @@ import torch.nn.functional as F
 import torch.optim as optim
 from data import get_batch
 from meta_optimizer import MetaModel, MetaOptimizer, FastMetaOptimizer
-from model import Model, Model2
+from model import Model, Model2, CNNModel
 from torch.autograd import Variable
 from torchvision import datasets, transforms
 from torchtext import data, datasets
@@ -145,7 +145,8 @@ class Config:
     n_labels = 3
     emb_update = False
     lr = 1e-3
-    batch_size = 128
+    kernel_size = 3
+    filter_num = 100
 
 def main2():
     TEXT = data.Field(sequential=True, include_lengths=True)
@@ -243,7 +244,45 @@ def main2():
         print("Epoch: {}, final loss {}, average final/initial loss ratio: {}, params: {}".format(epoch, final_loss / args.updates_per_epoch,
                                                                        decrease_in_loss / args.updates_per_epoch, meta_optimizer.linear1._parameters.items()))
 
+def main_simple():
+    TEXT = data.Field(sequential=True, include_lengths=True)
+    LABEL = data.Field(sequential=False)
+    train, val, test = datasets.SNLI.splits(TEXT, LABEL)
+    TEXT.build_vocab(train, vectors="glove.840B.300d")
+    LABEL.build_vocab(train)
+    vocab = TEXT.vocab
+    train_iter, val_iter, test_iter = data.Iterator.splits(
+        (train, val, test), 
+        batch_size=50,
+        repeat=False)
+    config = Config()
+    
+    criterion = nn.CrossEntropyLoss()
+
+    # model = CNNModel(vocab, config)
+    model = Model(vocab, config)
+
+    if args.cuda:
+        model.cuda()
+
+    optimizer = optim.Adam([param for param in model.parameters() if param.requires_grad], lr=1e-3)
+
+    cnt = 0
+    for epoch in range(args.max_epoch):
+        for batch in train_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean()
+            loss = criterion(f_x, y)
+            model.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if cnt % 100 == 0:
+                print 'acc=', acc
+                print 'loss=', loss
+            cnt += 1
 
 
 if __name__ == "__main__":
-    main2()
+    main_simple()
