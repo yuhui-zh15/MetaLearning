@@ -170,7 +170,7 @@ def main2():
     if args.cuda:
         meta_model.cuda()
 
-    meta_optimizer = MetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
     if args.cuda:
         meta_optimizer.cuda()
 
