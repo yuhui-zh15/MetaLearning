@@ -279,7 +279,7 @@ def main_simple():
             optimizer.step()
 
             if train_cnt % 100 == 0:
-                print 'cnt = {}, acc = {}, loss = {}'.format(cnt, acc, loss.float())
+                print 'cnt = {}, acc = {}, loss = {}'.format(train_cnt, acc, loss.float())
             train_cnt += 1
             train_acc += acc
 
