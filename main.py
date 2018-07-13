@@ -165,7 +165,7 @@ def main2():
 
     # Create a meta optimizer that wraps a model into a meta model
     # to keep track of the meta updates.
-    meta_model = Model(vocab, config)
+    meta_model = CNNModel(vocab, config)
     if args.cuda:
         meta_model.cuda()
 
@@ -181,7 +181,7 @@ def main2():
         for i in range(args.updates_per_epoch):
 
             # Sample a new model
-            model = Model(vocab, config)
+            model = CNNModel(vocab, config)
             if args.cuda:
                 model.cuda()
 
@@ -265,22 +265,34 @@ def main_simple():
 
     optimizer = optim.Adam([param for param in model.parameters() if param.requires_grad], lr=1e-3)
 
-    cnt = 0
+    
     for epoch in range(args.max_epoch):
+        train_acc = 0.0
+        train_cnt = 0
         for batch in train_iter:
             x, y = batch, batch.label - 1
             f_x = model(x)
-            acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean()
+            acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
             loss = criterion(f_x, y)
             model.zero_grad()
             loss.backward()
             optimizer.step()
 
-            if cnt % 100 == 0:
-                print 'acc=', acc
-                print 'loss=', loss
-            cnt += 1
+            if train_cnt % 100 == 0:
+                print 'cnt = {}, acc = {}, loss = {}'.format(cnt, acc, loss.float())
+            train_cnt += 1
+            train_acc += acc
+
+        test_acc = 0.0
+        test_cnt = 0
+        for batch in test_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            test_acc += (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+            test_cnt += 1
+        print 'epoch = {}, train_acc = {}, test_acc = {}'.format(epoch, train_acc / train_cnt, test_acc / test_cnt)
+
 
 
 if __name__ == "__main__":
-    main2()
+    main_simple()
