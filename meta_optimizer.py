@@ -113,7 +113,8 @@ class FastMetaOptimizer(nn.Module):
         self.meta_model = model
 
         self.linear1 = nn.Linear(6, 2)
-        self.linear1.bias.data[0] = 1
+        self.linear1.bias.data[0] = 5.0
+        # self.linear1.bias.data[1] = -5.0
 
     def forward(self, x):
         # Gradients preprocessing

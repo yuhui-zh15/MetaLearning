@@ -16,11 +16,11 @@ from torchtext import data, datasets
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                     help='batch size (default: 32)')
-parser.add_argument('--optimizer_steps', type=int, default=100, metavar='N',
+parser.add_argument('--optimizer_steps', type=int, default=1000, metavar='N',
                     help='number of meta optimizer steps (default: 100)')
 parser.add_argument('--truncated_bptt_step', type=int, default=20, metavar='N',
                     help='step at which it truncates bptt (default: 20)')
-parser.add_argument('--updates_per_epoch', type=int, default=10, metavar='N',
+parser.add_argument('--updates_per_epoch', type=int, default=1000, metavar='N',
                     help='updates per epoch (default: 100)')
 parser.add_argument('--max_epoch', type=int, default=10000, metavar='N',
                     help='number of epoch (default: 10000)')
@@ -157,12 +157,10 @@ def main2():
     vocab = TEXT.vocab
     train_iter, val_iter, test_iter = data.Iterator.splits(
         (train, val, test), 
-        batch_size=32,
+        batch_size=50,
         repeat=False)
     config = Config()
     
-    # model = Model(vocab, config) 
-    # optimizer = MetaLearner()
     criterion = nn.CrossEntropyLoss()
 
     # Create a meta optimizer that wraps a model into a meta model
@@ -175,7 +173,7 @@ def main2():
     if args.cuda:
         meta_optimizer.cuda()
 
-    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-4)
+    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-3)
 
     for epoch in range(args.max_epoch):
         decrease_in_loss = 0.0
@@ -285,4 +283,4 @@ def main_simple():
 
 
 if __name__ == "__main__":
-    main_simple()
+    main2()
