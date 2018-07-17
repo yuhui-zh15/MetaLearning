@@ -112,13 +112,16 @@ class FastMetaOptimizer(nn.Module):
         super(FastMetaOptimizer, self).__init__()
         self.meta_model = model
 
-        self.linear1 = nn.Linear(6, 2)
-        self.linear1.bias.data[0] = 5.0
+        self.linear1 = nn.Linear(6, 10)
+        self.linear2 = nn.Linear(10, 2)
+        self.linear2.bias.data[0] = 5.0
+
         # self.linear1.bias.data[1] = -5.0
 
     def forward(self, x):
         # Gradients preprocessing
         x = F.sigmoid(self.linear1(x))
+        x = F.sigmoid(self.linear2(x))
         return x.split(1, 1)
 
     def reset_lstm(self, keep_states=False, model=None, use_cuda=False):

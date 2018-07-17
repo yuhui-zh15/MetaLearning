@@ -16,13 +16,13 @@ from torchtext import data, datasets
 parser = argparse.ArgumentParser(description='PyTorch REINFORCE example')
 parser.add_argument('--batch_size', type=int, default=32, metavar='N',
                     help='batch size (default: 32)')
-parser.add_argument('--optimizer_steps', type=int, default=1000, metavar='N',
+parser.add_argument('--optimizer_steps', type=int, default=500, metavar='N',
                     help='number of meta optimizer steps (default: 100)')
 parser.add_argument('--truncated_bptt_step', type=int, default=20, metavar='N',
                     help='step at which it truncates bptt (default: 20)')
-parser.add_argument('--updates_per_epoch', type=int, default=1000, metavar='N',
+parser.add_argument('--updates_per_epoch', type=int, default=100, metavar='N',
                     help='updates per epoch (default: 100)')
-parser.add_argument('--max_epoch', type=int, default=10000, metavar='N',
+parser.add_argument('--max_epoch', type=int, default=10, metavar='N',
                     help='number of epoch (default: 10000)')
 parser.add_argument('--hidden_size', type=int, default=10, metavar='N',
                     help='hidden size of the meta optimizer (default: 10)')
@@ -146,7 +146,7 @@ class Config:
     emb_update = False
     lr = 1e-3
     kernel_size = 3
-    filter_num = 100
+    filter_num = 300
 
 def main2():
     TEXT = data.Field(sequential=True, include_lengths=True)
@@ -242,7 +242,189 @@ def main2():
         print("Epoch: {}, final loss {}, average final/initial loss ratio: {}, params: {}".format(epoch, final_loss / args.updates_per_epoch,
                                                                        decrease_in_loss / args.updates_per_epoch, [meta_optimizer.f, meta_optimizer.i]))
 
-def main_simple():
+
+def main_meta_cnn():
+    TEXT = data.Field(sequential=True, include_lengths=True)
+    LABEL = data.Field(sequential=False)
+    train, val, test = datasets.SNLI.splits(TEXT, LABEL)
+    TEXT.build_vocab(train, vectors="glove.840B.300d")
+    LABEL.build_vocab(train)
+    vocab = TEXT.vocab
+    train_iter, val_iter, test_iter = data.Iterator.splits(
+        (train, val, test), 
+        batch_size=50,
+        repeat=False)
+    config = Config()
+    
+    criterion = nn.CrossEntropyLoss()
+
+    # Create a meta optimizer that wraps a model into a meta model
+    # to keep track of the meta updates.
+    meta_model = CNNModel(vocab, config)
+    if args.cuda:
+        meta_model.cuda()
+
+    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    if args.cuda:
+        meta_optimizer.cuda()
+
+    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-3)
+
+
+    for i in range(args.max_epoch):
+
+        # Sample a new model
+        model = CNNModel(vocab, config)
+        if args.cuda:
+            model.cuda()
+
+        train_acc = 0.0
+        train_cnt = 0
+        for k in range(args.optimizer_steps):
+            # Keep states for truncated BPTT
+            meta_optimizer.reset_lstm(
+                keep_states=k > 0, model=model, use_cuda=args.cuda)
+
+            loss_sum = 0
+            prev_loss = torch.zeros(1)
+            if args.cuda:
+                prev_loss = prev_loss.cuda()
+            for j in range(args.truncated_bptt_step):
+                batch = next(iter(train_iter))
+                x, y = batch, batch.label - 1
+
+                # First we need to compute the gradients of the model
+                f_x = model(x)
+                acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+                train_acc += acc
+                train_cnt += 1
+                loss = criterion(f_x, y)
+                model.zero_grad()
+                loss.backward()
+
+                # Perfom a meta update using gradients from model
+                # and return the current meta model saved in the optimizer
+                meta_model = meta_optimizer.meta_update(model, loss.data)
+
+                # Compute a loss for a step the meta optimizer
+                f_x = meta_model(x)
+                loss = criterion(f_x, y)
+
+                loss_sum += (loss - Variable(prev_loss))
+
+                prev_loss = loss.data
+
+            # Update the parameters of the meta optimizer
+            meta_optimizer.zero_grad()
+            loss_sum.backward()
+            for param in meta_optimizer.parameters():
+                param.grad.data.clamp_(-1, 1)
+            optimizer.step()
+
+            print 'i = {}, k = {}, acc = {}, loss = {}'.format(i, k, acc, loss.float())
+
+        test_acc = 0.0
+        test_cnt = 0
+        for batch in test_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            test_acc += (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+            test_cnt += 1
+        print 'epoch = {}, train_acc = {}, test_acc = {}'.format(i, train_acc / train_cnt, test_acc / test_cnt)
+
+
+def main_meta_lstm():
+    TEXT = data.Field(sequential=True, include_lengths=True)
+    LABEL = data.Field(sequential=False)
+    train, val, test = datasets.SNLI.splits(TEXT, LABEL)
+    TEXT.build_vocab(train, vectors="glove.840B.300d")
+    LABEL.build_vocab(train)
+    vocab = TEXT.vocab
+    train_iter, val_iter, test_iter = data.Iterator.splits(
+        (train, val, test), 
+        batch_size=50,
+        repeat=False, 
+        shuffle=False)
+    config = Config()
+    
+    criterion = nn.CrossEntropyLoss()
+
+    # Create a meta optimizer that wraps a model into a meta model
+    # to keep track of the meta updates.
+    meta_model = Model(vocab, config)
+    if args.cuda:
+        meta_model.cuda()
+
+    meta_optimizer = FastMetaOptimizer(MetaModel(meta_model), args.num_layers, args.hidden_size)
+    if args.cuda:
+        meta_optimizer.cuda()
+
+    optimizer = optim.Adam(meta_optimizer.parameters(), lr=1e-3)
+
+
+    for i in range(args.max_epoch):
+
+        # Sample a new model
+        model = Model(vocab, config)
+        if args.cuda:
+            model.cuda()
+
+        train_acc = 0.0
+        train_cnt = 0
+        for k in range(args.optimizer_steps):
+            # Keep states for truncated BPTT
+            meta_optimizer.reset_lstm(
+                keep_states=k > 0, model=model, use_cuda=args.cuda)
+
+            loss_sum = 0
+            prev_loss = torch.zeros(1)
+            if args.cuda:
+                prev_loss = prev_loss.cuda()
+            for j in range(args.truncated_bptt_step):
+                batch = next(iter(train_iter))
+                x, y = batch, batch.label - 1
+
+                # First we need to compute the gradients of the model
+                f_x = model(x)
+                acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+                train_acc += acc
+                train_cnt += 1
+                loss = criterion(f_x, y)
+                model.zero_grad()
+                loss.backward()
+
+                # Perfom a meta update using gradients from model
+                # and return the current meta model saved in the optimizer
+                meta_model = meta_optimizer.meta_update(model, loss.data)
+
+                # Compute a loss for a step the meta optimizer
+                f_x = meta_model(x)
+                loss = criterion(f_x, y)
+
+                loss_sum += (loss - Variable(prev_loss))
+
+                prev_loss = loss.data
+
+            # Update the parameters of the meta optimizer
+            meta_optimizer.zero_grad()
+            loss_sum.backward()
+            for param in meta_optimizer.parameters():
+                param.grad.data.clamp_(-1, 1)
+            optimizer.step()
+
+            print 'i = {}, k = {}, acc = {}, loss = {}'.format(i, k, acc, loss.float())
+
+        test_acc = 0.0
+        test_cnt = 0
+        for batch in test_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            test_acc += (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+            test_cnt += 1
+        print 'epoch = {}, train_acc = {}, test_acc = {}'.format(i, train_acc / train_cnt, test_acc / test_cnt)
+
+
+def main_simple_lstm():
     TEXT = data.Field(sequential=True, include_lengths=True)
     LABEL = data.Field(sequential=False)
     train, val, test = datasets.SNLI.splits(TEXT, LABEL)
@@ -292,7 +474,59 @@ def main_simple():
             test_cnt += 1
         print 'epoch = {}, train_acc = {}, test_acc = {}'.format(epoch, train_acc / train_cnt, test_acc / test_cnt)
 
+def main_simple_cnn():
+    TEXT = data.Field(sequential=True, include_lengths=True)
+    LABEL = data.Field(sequential=False)
+    train, val, test = datasets.SNLI.splits(TEXT, LABEL)
+    TEXT.build_vocab(train, vectors="glove.840B.300d")
+    LABEL.build_vocab(train)
+    vocab = TEXT.vocab
+    train_iter, val_iter, test_iter = data.Iterator.splits(
+        (train, val, test), 
+        batch_size=50,
+        repeat=True,
+        shuffle=False)
+    config = Config()
+    
+    criterion = nn.CrossEntropyLoss()
+
+    model = CNNModel(vocab, config)
+    # model = Model(vocab, config)
+
+    if args.cuda:
+        model.cuda()
+
+    optimizer = optim.Adam([param for param in model.parameters() if param.requires_grad], lr=1e-3)
+
+    
+    for epoch in range(args.max_epoch):
+        train_acc = 0.0
+        train_cnt = 0
+        for batch in train_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            acc = (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+            loss = criterion(f_x, y)
+            model.zero_grad()
+            loss.backward()
+            optimizer.step()
+
+            if train_cnt % 100 == 0:
+                print 'cnt = {}, acc = {}, loss = {}'.format(train_cnt, acc, loss.float())
+            train_cnt += 1
+            train_acc += acc
+
+        test_acc = 0.0
+        test_cnt = 0
+        for batch in test_iter:
+            x, y = batch, batch.label - 1
+            f_x = model(x)
+            test_acc += (f_x.max(1)[1] == y).type(torch.FloatTensor).mean().float()
+            test_cnt += 1
+        print 'epoch = {}, train_acc = {}, test_acc = {}'.format(epoch, train_acc / train_cnt, test_acc / test_cnt)
+
+
 
 
 if __name__ == "__main__":
-    main_simple()
+    main_meta_cnn()

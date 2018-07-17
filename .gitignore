@@ -2,3 +2,4 @@
 .data
 .vector_cache
 *.pyc
+*.txt
